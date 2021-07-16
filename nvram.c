@@ -13,6 +13,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <sys/syscall.h>
 
 #include "alias.h"
 #include "nvram.h"
@@ -59,18 +60,18 @@ static int sem_get() {
 
     // Generate key for semaphore based on the mount point
     if (!ftok || (key = ftok(MOUNT_POINT, IPC_KEY)) == -1) {
-        PRINT_MSG("%s\n", "Unable to get semaphore key!");
+//      PRINT_MSG("%s\n", "Unable to get semaphore key!");
         return -1;
     }
 
-    PRINT_MSG("Key: %x\n", key);
+//  PRINT_MSG("Key: %x\n", key);
 
     // Get the semaphore using the key
     if ((semid = semget(key, 1, IPC_CREAT | IPC_EXCL | 0666)) >= 0) {
         semun.val = 1;
         // Unlock the semaphore and set the sem_otime field
         if (semop(semid, &sembuf, 1) == -1) {
-            PRINT_MSG("%s\n", "Unable to initialize semaphore!");
+//          PRINT_MSG("%s\n", "Unable to initialize semaphore!");
             // Clean up semaphore
             semctl(semid, 0, IPC_RMID);
             semid = -1;
@@ -78,7 +79,7 @@ static int sem_get() {
     } else if (errno == EEXIST) {
         // Get the semaphore in non-exclusive mode
         if ((semid = semget(key, 1, 0)) < 0) {
-            PRINT_MSG("%s\n", "Unable to get semaphore non-exclusively!");
+//          PRINT_MSG("%s\n", "Unable to get semaphore non-exclusively!");
             return semid;
         }
 
@@ -91,9 +92,13 @@ static int sem_get() {
                 break;
             }
 
+            (void)syscall(__NR_sched_yield);
+
+#if 0
             if (!(timeout % 100)) {
                 PRINT_MSG("Waiting for semaphore initialization (Key: %x, Semaphore: %x)...\n", key, semid);
             }
+#endif
         }
     }
 
@@ -116,7 +121,7 @@ static void sem_lock() {
             while ((ent = getmntent_r(mnt, &entry, temp, BUFFER_SIZE))) {
                 if (!strncmp(ent->mnt_dir, MOUNT_POINT, sizeof(MOUNT_POINT) - 2)) {
                     init = 1;
-                    PRINT_MSG("%s\n", "Already initialized!");
+//                  PRINT_MSG("%s\n", "Already initialized!");
                     endmntent(mnt);
                     goto cont;
                 }
@@ -124,21 +129,21 @@ static void sem_lock() {
             endmntent(mnt);
         }
 
-        PRINT_MSG("%s\n", "Triggering NVRAM initialization!");
+//      PRINT_MSG("%s\n", "Triggering NVRAM initialization!");
         nvram_init();
     }
 
 cont:
     // Must get sempahore after NVRAM initialization, mounting will change ID
     if ((semid = sem_get()) == -1) {
-        PRINT_MSG("%s\n", "Unable to get semaphore!");
+//      PRINT_MSG("%s\n", "Unable to get semaphore!");
         return;
     }
 
 //    PRINT_MSG("%s\n", "Locking semaphore...");
 
     if (semop(semid, &sembuf, 1) == -1) {
-        PRINT_MSG("%s\n", "Unable to lock semaphore!");
+//      PRINT_MSG("%s\n", "Unable to lock semaphore!");
     }
 
     return;
@@ -153,14 +158,14 @@ static void sem_unlock() {
     };
 
     if ((semid = sem_get(NULL)) == -1) {
-        PRINT_MSG("%s\n", "Unable to get semaphore!");
+//      PRINT_MSG("%s\n", "Unable to get semaphore!");
         return;
     }
 
 //    PRINT_MSG("%s\n", "Unlocking semaphore...");
 
     if (semop(semid, &sembuf, 1) == -1) {
-        PRINT_MSG("%s\n", "Unable to unlock semaphore!");
+//      PRINT_MSG("%s\n", "Unable to unlock semaphore!");
     }
 
     return;
@@ -385,11 +390,37 @@ int nvram_get_buf(const char *key, char *buf, size_t sz) {
 
     sem_lock();
 
+#if 0
     if ((f = fopen(path, "rb")) == NULL) {
         sem_unlock();
         PRINT_MSG("Unable to open key: %s!\n", path);
         return E_FAILURE;
     }
+#else
+    if ((f = fopen(path, "rb")) == NULL) {
+        PRINT_MSG("Unable to open key: %s!\n", path);
+
+        // instead of failing, can we create the file instead?
+        PRINT_MSG("Attempting to create nvram entry: %s\n", path);
+        if ((f = fopen(path, "w+")) == NULL) {
+            PRINT_MSG("Unable to touch new nvram entry: %s!\n", path);
+            sem_unlock();
+            return E_FAILURE;
+
+        } else {
+            PRINT_MSG("%s\n", "Successfully created the new nvram entry...");
+
+            //write(f, "1", sizeof("1"));
+            fclose(f);
+
+            if ((f = fopen(path, "rb")) == NULL) {
+                sem_unlock();
+                PRINT_MSG("(2nd try) Unable to open key: %s!\n", path);
+                return E_FAILURE;
+            }
+        }
+    }
+#endif
 
     if (fgets(buf, sz, f) != buf) {
         buf[0] = '\0';
@@ -397,7 +428,7 @@ int nvram_get_buf(const char *key, char *buf, size_t sz) {
     fclose(f);
     sem_unlock();
 
-    PRINT_MSG("= \"%s\"\n", buf);
+//  PRINT_MSG("= \"%s\"\n", buf);
 
     return E_SUCCESS;
 }
@@ -656,7 +687,7 @@ int nvram_unset(const char *key) {
 
 int nvram_match(const char *key, const char *val) {
     if (!key) {
-        PRINT_MSG("%s\n", "NULL key!");
+//      PRINT_MSG("%s\n", "NULL key!");
         return E_FAILURE;
     }
 
@@ -667,11 +698,11 @@ int nvram_match(const char *key, const char *val) {
     PRINT_MSG("%s (%s) ?= \"%s\"\n", key, temp, val);
 
     if (strncmp(temp, val, BUFFER_SIZE)) {
-        PRINT_MSG("%s\n", "false");
+//      PRINT_MSG("%s\n", "false");
         return E_FAILURE;
     }
 
-    PRINT_MSG("%s\n", "true");
+//  PRINT_MSG("%s\n", "true");
     return E_SUCCESS;
 }
 
