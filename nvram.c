@@ -13,7 +13,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
-#include <sys/syscall.h>
+#include <sched.h>
 
 #include "alias.h"
 #include "nvram.h"
@@ -92,7 +92,7 @@ static int sem_get() {
                 break;
             }
 
-            (void)syscall(__NR_sched_yield);
+            (void)sched_yield();
 
 #if 0
             if (!(timeout % 100)) {
