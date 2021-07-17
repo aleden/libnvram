@@ -346,12 +346,12 @@ char *nvram_get(const char *key) {
     }
 #endif
 
-    return (nvram_get_buf(key, temp, BUFFER_SIZE) == E_SUCCESS) ? strndup(temp, BUFFER_SIZE) : NULL;
+    return (nvram_get_buf(key, temp, BUFFER_SIZE) == E_SUCCESS) ? strndup(temp, BUFFER_SIZE) : NULL; /* FIXME memory leak */
 }
 
 char *nvram_safe_get(const char *key) {
     char* ret = nvram_get(key);
-    return ret ? ret : strdup("");
+    return ret ? ret : strdup(""); /* FIXME memory leak */
 }
 
 char *nvram_default_get(const char *key, const char *val) {
